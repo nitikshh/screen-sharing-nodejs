@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Sharing</title>
+    <style>
+        #videoContainer {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        video {
+            width: 80%;
+            border: 1px solid #ccc;
+        }
+        button {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Real-time Screen Sharing</h1>
+    <div id="videoContainer">
+        <video id="screenVideo" autoplay playsinline></video>
+    </div>
+    <div style="text-align:center;">
+        <button id="startScreenShare">Start Screen Sharing</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

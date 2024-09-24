@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer Screen</title>
+    <style>
+        #viewerVideo {
+            width: 80%;
+            border: 1px solid #ccc;
+            display: block;
+            margin: 0 auto;
+            margin-top: 20px;
+            display: none;
+            /* Initially hidden */
+        }
+
+        #statusMessage {
+            text-align: center;
+            font-size: 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 style="text-align:center;">Viewing Shared Screen</h1>
+    <div id="statusMessage">No screen to share</div>
+    <video id="viewerVideo" autoplay playsinline muted></video>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const viewerVideo = document.getElementById('viewerVideo');
+        const statusMessage = document.getElementById('statusMessage');
+        let peerConnection;
+
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' } // Only using the STUN server for now
+            ]
+        };
+
+
+        // Handle screen sharing status
+        socket.on('screen-sharing', (isSharing) => {
+            if (isSharing) {
+                statusMessage.textContent = 'Sharing screen...';
+            } else {
+                statusMessage.textContent = 'No screen to share';
+                viewerVideo.style.display = 'none';
+            }
+        });
+
+        // Handle WebRTC offer from the host
+        socket.on('offer', async (offer) => {
+            peerConnection = new RTCPeerConnection(configuration);
+
+            peerConnection.ontrack = (event) => {
+                viewerVideo.style.display = 'block'; // Show video when stream is received
+                statusMessage.style.display = 'none'; // Hide status message
+                viewerVideo.srcObject = event.streams[0]; // Display the incoming stream
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    console.log('Sending ICE candidate:', event.candidate);
+                    socket.emit('candidate', event.candidate);
+                }
+            };
+
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            socket.emit('answer', answer);
+        });
+
+        // Handle ICE candidates
+        socket.on('candidate', async (candidate) => {
+            if (peerConnection) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+        });
+
+        // Ensure playback starts on user interaction
+        document.addEventListener('click', () => {
+            if (viewerVideo.paused) {
+                viewerVideo.play();
+            }
+        });
+    </script>
+</body>
+
+</html>
