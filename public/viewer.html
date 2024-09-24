@@ -4,45 +4,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Viewer Screen</title>
+    <title>Video Viewing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        #viewerVideo {
-            width: 80%;
-            border: 1px solid #ccc;
-            display: block;
-            margin: 0 auto;
-            margin-top: 20px;
-            display: none;
-            /* Initially hidden */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
-
-        #statusMessage {
-            text-align: center;
-            font-size: 20px;
-            margin-top: 20px;
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .hexagon {
+            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
         }
     </style>
 </head>
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center overflow-hidden">
+    <div class="absolute inset-0 bg-gradient-to-br from-blue-500 to-purple-600 opacity-20"></div>
+    
+    <div class="relative z-10 w-full max-w-4xl">
+        <h1 class="text-4xl md:text-6xl font-bold text-center mb-8 animate-pulse">
+            Viewing Shared Screen
+        </h1>
+        
+        <div id="statusMessage" class="text-xl text-center mb-6 animate-float">
+            No screen to share
+        </div>
+        
+        <div class="relative bg-gray-800 p-1 shadow-lg transform transition-all duration-300 hover:scale-105">
+            <video id="viewerVideo" autoplay playsinline muted class="w-full h-auto"></video>
+            <button id="fullscreenToggle" class="absolute top-2 right-2 p-2 bg-black bg-opacity-50 rounded-full hover:bg-opacity-75 transition-opacity duration-300">
+                <i data-lucide="maximize" class="w-6 h-6"></i>
+            </button>
+        </div>
+    </div>
 
-<body>
-    <h1 style="text-align:center;">Viewing Shared Screen</h1>
-    <div id="statusMessage">No screen to share</div>
-    <video id="viewerVideo" autoplay playsinline muted></video>
+    <div class="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500"></div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <div class="fixed top-4 right-4 flex space-x-2">
+        <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+        <div class="w-3 h-3 rounded-full bg-yellow-500 animate-pulse" style="animation-delay: 0.2s"></div>
+        <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse" style="animation-delay: 0.4s"></div>
+    </div>
     <script>
         const socket = io();
         const viewerVideo = document.getElementById('viewerVideo');
         const statusMessage = document.getElementById('statusMessage');
+        const fullscreenToggle = document.getElementById('fullscreenToggle');
         let peerConnection;
 
+        lucide.createIcons();
+
+        fullscreenToggle.addEventListener('click', toggleFullScreen);
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                if (viewerVideo.requestFullscreen) {
+                    viewerVideo.requestFullscreen();
+                } else if (viewerVideo.mozRequestFullScreen) { // Firefox
+                    viewerVideo.mozRequestFullScreen();
+                } else if (viewerVideo.webkitRequestFullscreen) { // Chrome, Safari and Opera
+                    viewerVideo.webkitRequestFullscreen();
+                } else if (viewerVideo.msRequestFullscreen) { // IE/Edge
+                    viewerVideo.msRequestFullscreen();
+                }
+                fullscreenToggle.innerHTML = '<i data-lucide="minimize" class="w-6 h-6"></i>';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+                fullscreenToggle.innerHTML = '<i data-lucide="maximize" class="w-6 h-6"></i>';
+            }
+            lucide.createIcons();
+        }
+
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+        document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+        document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+
+        function updateFullscreenButton() {
+            if (document.fullscreenElement) {
+                fullscreenToggle.innerHTML = '<i data-lucide="minimize" class="w-6 h-6"></i>';
+            } else {
+                fullscreenToggle.innerHTML = '<i data-lucide="maximize" class="w-6 h-6"></i>';
+            }
+            lucide.createIcons();
+        }
+    
         const configuration = {
             iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' } // Only using the STUN server for now
+                { urls: 'stun:stun.l.google.com:19302' }
             ]
         };
-
-
+    
         // Handle screen sharing status
         socket.on('screen-sharing', (isSharing) => {
             if (isSharing) {
@@ -52,44 +116,54 @@
                 viewerVideo.style.display = 'none';
             }
         });
-
+    
         // Handle WebRTC offer from the host
         socket.on('offer', async (offer) => {
+            // If there is an existing peer connection, close it before creating a new one
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+    
             peerConnection = new RTCPeerConnection(configuration);
-
+    
             peerConnection.ontrack = (event) => {
                 viewerVideo.style.display = 'block'; // Show video when stream is received
                 statusMessage.style.display = 'none'; // Hide status message
                 viewerVideo.srcObject = event.streams[0]; // Display the incoming stream
             };
-
+    
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
                     console.log('Sending ICE candidate:', event.candidate);
                     socket.emit('candidate', event.candidate);
                 }
             };
-
+    
+            // Set the remote description with the offer
             await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    
+            // Create and send an answer back to the host
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
             socket.emit('answer', answer);
         });
-
+    
         // Handle ICE candidates
         socket.on('candidate', async (candidate) => {
             if (peerConnection) {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
             }
         });
-
-        // Ensure playback starts on user interaction
+    
+        // Ensure video playback starts on user interaction (this is needed for mobile devices)
         document.addEventListener('click', () => {
             if (viewerVideo.paused) {
                 viewerVideo.play();
             }
         });
     </script>
+    
 </body>
 
 </html>

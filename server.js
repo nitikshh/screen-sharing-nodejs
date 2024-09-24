@@ -3,8 +3,10 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
+app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server);
 
@@ -17,17 +19,23 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/viewer', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'viewer.html'));
 });
+let lastOffer = null; // Store the last offer
 
-// Handle socket connections
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
     // Notify viewers about the screen sharing status when they connect
     socket.emit('screen-sharing', isScreenSharing);
 
+    // If screen sharing is already active, send the last offer to new viewers
+    if (isScreenSharing && lastOffer) {
+        socket.emit('offer', lastOffer); // Send the last offer to new viewer
+    }
+
     // Handle the start of screen sharing (offer)
     socket.on('offer', (offer) => {
-        isScreenSharing = true; // Update screen sharing status
+        isScreenSharing = true;
+        lastOffer = offer; // Save the latest offer for future viewers
         socket.broadcast.emit('offer', offer); // Send offer to all clients except the sender
         socket.broadcast.emit('screen-sharing', isScreenSharing); // Notify viewers that screen sharing is live
     });
@@ -46,6 +54,7 @@ io.on('connection', (socket) => {
         console.log('A user disconnected:', socket.id);
     });
 });
+
 
 // Start the server
 const PORT = process.env.PORT || 3000;
